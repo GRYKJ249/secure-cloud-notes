@@ -8,8 +8,7 @@ import { toast } from "sonner";
 import { OperaLogoMark } from "@/components/brand/OperaLogoMark";
 import { Markdown } from "@/components/chat/Markdown";
 import { ImageCard } from "@/components/chat/ImageCard";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { addMessage, listMessages, saveImageData, updateThread } from "@/lib/local-db";
 import { useLang } from "@/lib/i18n";
 import { detectImageRequest } from "@/lib/image-intent";
 import { streamImage } from "@/lib/stream-image";
@@ -43,22 +42,15 @@ type LoadedThread = { messages: UIMessage[]; images: ImageTurn[] };
 
 function ThreadPage() {
   const { threadId } = Route.useParams();
-  const { user } = useAuth();
 
   const { data, isLoading } = useQuery<LoadedThread>({
     queryKey: ["chat-messages", threadId],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("chat_messages")
-        .select("id, role, content, image_url")
-        .eq("thread_id", threadId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
+    queryFn: () => {
+      const rows = listMessages(threadId);
 
       const messages: UIMessage[] = [];
       const images: ImageTurn[] = [];
-      for (const row of data ?? []) {
+      for (const row of rows) {
         if (row.image_url) {
           images.push({
             id: row.id,
@@ -70,7 +62,7 @@ function ThreadPage() {
         } else {
           messages.push({
             id: row.id,
-            role: row.role as "user" | "assistant",
+            role: row.role,
             parts: [{ type: "text" as const, text: row.content }],
           });
         }
@@ -90,19 +82,8 @@ function ThreadPage() {
   return <Thread key={threadId} threadId={threadId} initial={data} />;
 }
 
-function dataUrlToBlob(dataUrl: string): Blob {
-  const head = dataUrl.slice(0, dataUrl.indexOf(","));
-  const body = dataUrl.slice(dataUrl.indexOf(",") + 1);
-  const mime = head.match(/data:(.*?);/)?.[1] ?? "image/png";
-  const binary = atob(body);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: mime });
-}
-
 function Thread({ threadId, initial }: { threadId: string; initial: LoadedThread }) {
   const { t, lang } = useLang();
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [imageTurns, setImageTurns] = useState<ImageTurn[]>(initial.images);
@@ -118,14 +99,9 @@ function Thread({ threadId, initial }: { threadId: string; initial: LoadedThread
         .filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
         .join("");
-      if (!user || !text) return;
-      void supabase
-        .from("chat_messages")
-        .insert({ thread_id: threadId, user_id: user.id, role: "assistant", content: text });
-      void supabase
-        .from("chat_threads")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", threadId);
+      if (!text) return;
+      addMessage({ thread_id: threadId, role: "assistant", content: text });
+      updateThread(threadId, {});
     },
   });
 
@@ -151,31 +127,15 @@ function Thread({ threadId, initial }: { threadId: string; initial: LoadedThread
       });
 
       if (!finalUrl) throw new Error("No image returned");
-      if (!user) return;
-      const path = `${user.id}/${id}.png`;
-      const { error: uploadError } = await supabase.storage
-        .from("generations")
-        .upload(path, dataUrlToBlob(finalUrl), { contentType: "image/png", upsert: true });
-      if (uploadError) throw uploadError;
-
-      const { error: archiveError } = await supabase.from("generated_images").insert({ user_id: user.id, prompt, image_path: path });
-      if (archiveError) {
-        await supabase.storage.from("generations").remove([path]);
-        throw archiveError;
-      }
-      const { error: messageError } = await supabase.from("chat_messages").insert({
+      const saved = await saveImageData(finalUrl, prompt);
+      addMessage({
         thread_id: threadId,
-        user_id: user.id,
         role: "assistant",
         content: prompt,
-        image_url: path,
+        image_url: saved.path,
       });
-      if (messageError) throw messageError;
-      updateTurn(id, { path, dataUrl: finalUrl, status: "done" });
-      void supabase
-        .from("chat_threads")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", threadId);
+      updateTurn(id, { path: saved.path, dataUrl: finalUrl, status: "done" });
+      updateThread(threadId, {});
     } catch (error) {
       const raw = error instanceof Error ? error.message : String(error);
       const message = /safety|policy|moderation|content.?filter|refus|unsafe|blocked/i.test(raw)
@@ -189,17 +149,15 @@ function Thread({ threadId, initial }: { threadId: string; initial: LoadedThread
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const text = input.trim();
-    if (!text || busy || !user) return;
+    if (!text || busy) return;
     setInput("");
 
-    void supabase
-      .from("chat_messages")
-      .insert({ thread_id: threadId, user_id: user.id, role: "user", content: text });
+    addMessage({ thread_id: threadId, role: "user", content: text });
 
     const isFirst = messages.length === 0 && imageTurns.length === 0;
     if (isFirst) {
       const title = text.slice(0, 48) + (text.length > 48 ? "…" : "");
-      await supabase.from("chat_threads").update({ title }).eq("id", threadId);
+      updateThread(threadId, { title });
       void queryClient.invalidateQueries({ queryKey: ["chat-threads"] });
     }
 

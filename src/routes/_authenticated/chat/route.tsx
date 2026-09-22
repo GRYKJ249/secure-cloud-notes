@@ -8,8 +8,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { deleteThread, listThreads } from "@/lib/local-db";
 import { useLang } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/chat")({
@@ -29,28 +28,18 @@ export const Route = createFileRoute("/_authenticated/chat")({
 
 function ChatLayout() {
   const { t, lang } = useLang();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const params = useParams({ strict: false }) as { threadId?: string };
 
   const { data: threads } = useQuery({
-    queryKey: ["chat-threads", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("chat_threads")
-        .select("id, title, updated_at")
-        .eq("user_id", user!.id)
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryKey: ["chat-threads"],
+    queryFn: () => listThreads(),
   });
 
-  const removeThread = async (id: string) => {
-    await supabase.from("chat_threads").delete().eq("id", id);
+  const removeThread = (id: string) => {
+    deleteThread(id);
     void queryClient.invalidateQueries({ queryKey: ["chat-threads"] });
     if (params.threadId === id) navigate({ to: "/chat" });
   };
@@ -86,7 +75,7 @@ function ChatLayout() {
         </div>
 
         <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-          {(threads ?? []).map((thread: { id: string; title: string }) => (
+          {(threads ?? []).map((thread) => (
             <div
               key={thread.id}
               className={`group flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition ${
@@ -114,7 +103,7 @@ function ChatLayout() {
               </button>
             </div>
           ))}
-          {user && threads?.length === 0 && (
+          {threads?.length === 0 && (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
               {t("No conversations yet.", "لا توجد محادثات بعد.")}
             </p>

@@ -8,10 +8,8 @@ import {
   Copy,
   Download,
   Expand,
-  Globe,
   ImageIcon,
   Loader2,
-  Lock,
   Orbit,
   RefreshCw,
   Sparkles,
@@ -34,8 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { addImage, deleteImage, getFile, listImages, type GeneratedImage } from "@/lib/local-db";
 import { useLang } from "@/lib/i18n";
 import { streamImage } from "@/lib/stream-image";
 
@@ -55,14 +52,7 @@ export const Route = createFileRoute("/_authenticated/studio")({
 
 type StyleName = "Anime" | "Cyberpunk" | "3D Realistic" | "Cinematic" | "Oil Painting";
 type RatioName = "1:1" | "16:9" | "9:16";
-type GenerationRow = {
-  id: string;
-  prompt: string;
-  style: string | null;
-  image_path: string;
-  created_at: string;
-  is_public?: boolean | null;
-};
+type GenerationRow = GeneratedImage & { style?: string | null };
 type GalleryItem = GenerationRow & { signedUrl: string | null };
 type Result = {
   prompt: string;
@@ -131,52 +121,15 @@ function StudioPage() {
   const sign = async (rows: GenerationRow[]): Promise<GalleryItem[]> =>
     Promise.all(
       rows.map(async (row) => {
-        const { data: signed } = await supabase.storage.from("generations").createSignedUrl(row.image_path, 60 * 60);
-        return { ...row, signedUrl: signed?.signedUrl ?? null };
+        const file = await getFile(row.path);
+        return { ...row, image_path: row.path, signedUrl: file ? URL.createObjectURL(file) : null };
       }),
     );
 
   const galleryQuery = useQuery({
-    queryKey: ["generated-images", user?.id],
-    enabled: !!user,
-    queryFn: async (): Promise<GalleryItem[]> => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("generated_images")
-        .select("id, prompt, style, image_path, created_at, is_public")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return sign(data ?? []);
-    },
+    queryKey: ["generated-images"],
+    queryFn: async (): Promise<GalleryItem[]> => sign(listImages()),
   });
-
-  const communityQuery = useQuery({
-    queryKey: ["community-images"],
-    enabled: !!user,
-    queryFn: async (): Promise<GalleryItem[]> => {
-      const { data, error } = await supabase
-        .from("generated_images")
-        .select("id, prompt, style, image_path, created_at, is_public")
-        .eq("is_public", true)
-        .order("created_at", { ascending: false })
-        .limit(24);
-      if (error) throw error;
-      return sign(data ?? []);
-    },
-  });
-
-  const toggleShare = async (item: GalleryItem) => {
-    const next = !item.is_public;
-    const { error } = await supabase.from("generated_images").update({ is_public: next }).eq("id", item.id);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    await queryClient.invalidateQueries({ queryKey: ["generated-images", user?.id] });
-    await queryClient.invalidateQueries({ queryKey: ["community-images"] });
-    toast.success(next ? t("Shared to the community gallery.", "تمت المشاركة في معرض المجتمع.") : t("Made private again.", "أصبحت خاصة مرة أخرى."));
-  };
 
   const pickReference = (file: File | undefined) => {
     if (!file) return;

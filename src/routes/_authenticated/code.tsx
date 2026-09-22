@@ -27,8 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { OperaLogoMark } from "@/components/brand/OperaLogoMark";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { deleteWorkspaceFile, listWorkspaceFiles, renameWorkspaceFile, upsertWorkspaceFiles } from "@/lib/local-db";
 import { useLang } from "@/lib/i18n";
 import { Markdown } from "@/components/chat/Markdown";
 import {
@@ -156,7 +155,6 @@ const mkLine = (kind: TerminalLine["kind"], text: string): TerminalLine => ({ id
 
 function CodeWorkspace() {
   const { t, lang } = useLang();
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [openTabs, setOpenTabs] = useState<string[]>([]);
@@ -190,24 +188,14 @@ function CodeWorkspace() {
   }, []);
 
   const { data: files = [], isLoading } = useQuery({
-    queryKey: ["workspace-files", user?.id],
-    enabled: !!user,
+    queryKey: ["workspace-files"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("workspace_files")
-        .select("id, path, content, updated_at")
-        .eq("user_id", user!.id)
-        .order("path");
-      if (error) throw error;
-      if (data && data.length === 0) {
-        const { data: seeded, error: seedErr } = await supabase
-          .from("workspace_files")
-          .insert(STARTER_FILES.map((f) => ({ ...f, user_id: user!.id })))
-          .select("id, path, content, updated_at");
-        if (seedErr) throw seedErr;
-        return (seeded ?? []) as WorkspaceFile[];
+      const existing = listWorkspaceFiles();
+      if (existing.length === 0) {
+        upsertWorkspaceFiles(STARTER_FILES);
+        return listWorkspaceFiles();
       }
-      return (data ?? []) as WorkspaceFile[];
+      return existing;
     },
   });
 
@@ -228,26 +216,19 @@ function CodeWorkspace() {
 
   const persist = useCallback(
     async (path: string, content: string) => {
-      if (!user) return;
       setSaving(true);
-      const { error } = await supabase
-        .from("workspace_files")
-        .upsert({ user_id: user.id, path, content }, { onConflict: "user_id,path" });
+      upsertWorkspaceFiles([{ path, content }]);
       setSaving(false);
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
       setDirty((d) => {
         const n = new Set(d);
         n.delete(path);
         return n;
       });
-      queryClient.setQueryData<WorkspaceFile[]>(["workspace-files", user.id], (old) =>
+      queryClient.setQueryData<WorkspaceFile[]>(["workspace-files"], (old) =>
         (old ?? []).map((f) => (f.path === path ? { ...f, content } : f)),
       );
     },
-    [user, queryClient],
+    [queryClient],
   );
 
   const updateContent = (value: string) => {
@@ -280,18 +261,13 @@ function CodeWorkspace() {
   };
 
   const createFile = async (folder = "") => {
-    if (!user) return;
     const name = window.prompt(t("File name (e.g. utils.js)", "اسم الملف (مثال utils.js)"));
     if (!name?.trim()) return;
     const path = folder ? `${folder}/${name.trim()}` : name.trim();
     if (fileMap[path]) { toast.error(t("File already exists", "الملف موجود مسبقاً")); return; }
-    const { data, error } = await supabase
-      .from("workspace_files")
-      .insert({ user_id: user.id, path, content: "" })
-      .select("id, path, content, updated_at")
-      .single();
-    if (error) { toast.error(error.message); return; }
-    queryClient.setQueryData<WorkspaceFile[]>(["workspace-files", user.id], (old) => [...(old ?? []), data as WorkspaceFile]);
+    upsertWorkspaceFiles([{ path, content: "" }]);
+    const created = listWorkspaceFiles().find((f) => f.path === path);
+    if (created) queryClient.setQueryData<WorkspaceFile[]>(["workspace-files"], (old) => [...(old ?? []), created]);
     openFile(path);
   };
 
@@ -303,12 +279,10 @@ function CodeWorkspace() {
   };
 
   const renameFile = async (file: WorkspaceFile) => {
-    if (!user) return;
     const next = window.prompt(t("New path", "المسار الجديد"), file.path);
     if (!next?.trim() || next === file.path) return;
-    const { error } = await supabase.from("workspace_files").update({ path: next.trim() }).eq("id", file.id);
-    if (error) { toast.error(error.message); return; }
-    queryClient.setQueryData<WorkspaceFile[]>(["workspace-files", user.id], (old) =>
+    renameWorkspaceFile(file.path, next.trim());
+    queryClient.setQueryData<WorkspaceFile[]>(["workspace-files"], (old) =>
       (old ?? []).map((f) => (f.id === file.id ? { ...f, path: next.trim() } : f)),
     );
     setOpenTabs((tabs) => tabs.map((p) => (p === file.path ? next.trim() : p)));
@@ -320,29 +294,22 @@ function CodeWorkspace() {
   };
 
   const deleteFile = async (file: WorkspaceFile) => {
-    if (!user) return;
     if (!window.confirm(t(`Delete ${file.path}?`, `حذف ${file.path}؟`))) return;
-    const { error } = await supabase.from("workspace_files").delete().eq("id", file.id);
-    if (error) { toast.error(error.message); return; }
-    queryClient.setQueryData<WorkspaceFile[]>(["workspace-files", user.id], (old) => (old ?? []).filter((f) => f.id !== file.id));
+    deleteWorkspaceFile(file.path);
+    queryClient.setQueryData<WorkspaceFile[]>(["workspace-files"], (old) => (old ?? []).filter((f) => f.id !== file.id));
     closeTab(file.path);
   };
 
   const importDropped = async (e: DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    if (!user) return;
     const dropped = Array.from(e.dataTransfer.files).filter((f) => f.size < 512_000);
     if (!dropped.length) return;
-    const rows = await Promise.all(dropped.map(async (f) => ({ user_id: user.id, path: `imports/${f.name}`, content: await f.text() })));
-    const { data, error } = await supabase
-      .from("workspace_files")
-      .upsert(rows, { onConflict: "user_id,path" })
-      .select("id, path, content, updated_at");
-    if (error) { toast.error(error.message); return; }
-    void queryClient.invalidateQueries({ queryKey: ["workspace-files", user.id] });
-    toast.success(t(`Imported ${data?.length ?? 0} file(s)`, `تم استيراد ${data?.length ?? 0} ملف`));
-    if (data?.[0]) openFile(data[0].path);
+    const rows = await Promise.all(dropped.map(async (f) => ({ path: `imports/${f.name}`, content: await f.text() })));
+    upsertWorkspaceFiles(rows);
+    void queryClient.invalidateQueries({ queryKey: ["workspace-files"] });
+    toast.success(t(`Imported ${rows.length} file(s)`, `تم استيراد ${rows.length} ملف`));
+    if (rows[0]) openFile(rows[0].path);
   };
 
   const downloadZip = async () => {

@@ -4,8 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { OperaLogoMark } from "@/components/brand/OperaLogoMark";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { createThread } from "@/lib/local-db";
 import { useLang } from "@/lib/i18n";
 
 export const PENDING_KEY = "opera-pending-message";
@@ -26,56 +25,33 @@ export const Route = createFileRoute("/_authenticated/chat/")({
 
 function ChatIndex() {
   const { t, lang } = useLang();
-  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const resumed = useRef(false);
 
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
 
-  const start = async (text: string) => {
+  const start = (text: string) => {
     const message = text.trim();
     if (!message || busy) return;
 
     if (typeof window !== "undefined") sessionStorage.setItem(PENDING_KEY, message);
 
-    if (!user) {
-      navigate({ to: "/auth" });
-      return;
-    }
-
     setBusy(true);
     const title = message.slice(0, 48) + (message.length > 48 ? "…" : "");
-    const { data, error } = await supabase
-      .from("chat_threads")
-      .insert({ user_id: user.id, title })
-      .select("id")
-      .single();
-
-    if (error || !data) {
+    try {
+      const thread = createThread(title);
+      void queryClient.invalidateQueries({ queryKey: ["chat-threads"] });
+      navigate({ to: "/chat/$threadId", params: { threadId: thread.id } });
+    } catch (error) {
       setBusy(false);
-      toast.error(error?.message ?? "Could not start the conversation");
-      return;
+      toast.error(error instanceof Error ? error.message : "Could not start the conversation");
     }
-
-    void queryClient.invalidateQueries({ queryKey: ["chat-threads"] });
-    navigate({ to: "/chat/$threadId", params: { threadId: data.id } });
   };
-
-  // Resume the message the visitor typed before signing in.
-  useEffect(() => {
-    if (loading || !user || resumed.current || typeof window === "undefined") return;
-    const pending = sessionStorage.getItem(PENDING_KEY);
-    if (!pending) return;
-    resumed.current = true;
-    void start(pending);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
@@ -87,7 +63,7 @@ function ChatIndex() {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void start(input);
+          start(input);
         }}
         className="mt-7 w-full max-w-2xl"
       >
@@ -107,7 +83,7 @@ function ChatIndex() {
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                void start(input);
+                start(input);
               }
             }}
             dir={lang === "ar" ? "rtl" : "ltr"}
