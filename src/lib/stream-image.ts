@@ -1,6 +1,5 @@
 import { createParser } from "eventsource-parser";
 import { flushSync } from "react-dom";
-import { supabase } from "@/integrations/supabase/client";
 
 type ImagePayload = { type?: string; b64_json?: string; error?: { message?: string } };
 
@@ -14,8 +13,6 @@ export async function streamImage(
   const send = async (stream: boolean) => {
     signal?.throwIfAborted();
     const requestHeaders = new Headers(headers);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) requestHeaders.set("Authorization", `Bearer ${session.access_token}`);
     let body: FormData | string;
     if (input instanceof FormData) {
       const form = new FormData();

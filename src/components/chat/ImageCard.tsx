@@ -1,6 +1,6 @@
 import { Download, ImageOff, Loader2, Maximize2, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getFile } from "@/lib/browser-store";
 import { useLang } from "@/lib/i18n";
 
 type ImageCardProps = {
@@ -21,12 +21,9 @@ export function ImageCard({ prompt, dataUrl, path, status, error }: ImageCardPro
   useEffect(() => {
     let cancelled = false;
     if (dataUrl || !path) return;
-    void supabase.storage
-      .from("generations")
-      .createSignedUrl(path, 60 * 60)
-      .then(({ data }) => {
-        if (!cancelled) setSigned(data?.signedUrl ?? null);
-      });
+    void getFile(path).then((stored) => {
+      if (!cancelled) setSigned(stored);
+    });
     return () => {
       cancelled = true;
     };

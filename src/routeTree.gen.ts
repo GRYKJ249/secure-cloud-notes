@@ -11,11 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedChatRouteRouteImport } from './routes/_authenticated/chat/route'
 import { Route as AuthenticatedCodeRouteImport } from './routes/_authenticated/code'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedSecurityRouteImport } from './routes/_authenticated/security'
 import { Route as AuthenticatedStudioRouteImport } from './routes/_authenticated/studio'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiCodeAssistRouteImport } from './routes/api/code-assist'
@@ -33,11 +31,6 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedChatRouteRoute = AuthenticatedChatRouteRouteImport.update({
   id: '/chat',
   path: '/chat',
@@ -51,11 +44,6 @@ const AuthenticatedCodeRoute = AuthenticatedCodeRouteImport.update({
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedSecurityRoute = AuthenticatedSecurityRouteImport.update({
-  id: '/security',
-  path: '/security',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedStudioRoute = AuthenticatedStudioRouteImport.update({
@@ -97,11 +85,9 @@ const AuthenticatedChatThreadIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
   '/chat': typeof AuthenticatedChatRouteRouteWithChildren
   '/code': typeof AuthenticatedCodeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/security': typeof AuthenticatedSecurityRoute
   '/studio': typeof AuthenticatedStudioRoute
   '/api/chat': typeof ApiChatRoute
   '/api/code-assist': typeof ApiCodeAssistRoute
@@ -112,10 +98,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
   '/code': typeof AuthenticatedCodeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/security': typeof AuthenticatedSecurityRoute
   '/studio': typeof AuthenticatedStudioRoute
   '/api/chat': typeof ApiChatRoute
   '/api/code-assist': typeof ApiCodeAssistRoute
@@ -128,11 +112,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/auth': typeof AuthRoute
   '/_authenticated/chat': typeof AuthenticatedChatRouteRouteWithChildren
   '/_authenticated/code': typeof AuthenticatedCodeRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/security': typeof AuthenticatedSecurityRoute
   '/_authenticated/studio': typeof AuthenticatedStudioRoute
   '/api/chat': typeof ApiChatRoute
   '/api/code-assist': typeof ApiCodeAssistRoute
@@ -145,11 +127,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/auth'
     | '/chat'
     | '/code'
     | '/dashboard'
-    | '/security'
     | '/studio'
     | '/api/chat'
     | '/api/code-assist'
@@ -160,10 +140,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/auth'
     | '/code'
     | '/dashboard'
-    | '/security'
     | '/studio'
     | '/api/chat'
     | '/api/code-assist'
@@ -175,11 +153,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
-    | '/auth'
     | '/_authenticated/chat'
     | '/_authenticated/code'
     | '/_authenticated/dashboard'
-    | '/_authenticated/security'
     | '/_authenticated/studio'
     | '/api/chat'
     | '/api/code-assist'
@@ -192,7 +168,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  AuthRoute: typeof AuthRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiCodeAssistRoute: typeof ApiCodeAssistRoute
   ApiEditImageRoute: typeof ApiEditImageRoute
@@ -215,13 +190,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_authenticated/chat': {
       id: '/_authenticated/chat'
       path: '/chat'
@@ -241,13 +209,6 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/security': {
-      id: '/_authenticated/security'
-      path: '/security'
-      fullPath: '/security'
-      preLoaderRoute: typeof AuthenticatedSecurityRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/studio': {
@@ -322,7 +283,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChatRouteRoute: typeof AuthenticatedChatRouteRouteWithChildren
   AuthenticatedCodeRoute: typeof AuthenticatedCodeRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedSecurityRoute: typeof AuthenticatedSecurityRoute
   AuthenticatedStudioRoute: typeof AuthenticatedStudioRoute
 }
 
@@ -330,7 +290,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChatRouteRoute: AuthenticatedChatRouteRouteWithChildren,
   AuthenticatedCodeRoute: AuthenticatedCodeRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedSecurityRoute: AuthenticatedSecurityRoute,
   AuthenticatedStudioRoute: AuthenticatedStudioRoute,
 }
 
@@ -340,7 +299,6 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
   ApiChatRoute: ApiChatRoute,
   ApiCodeAssistRoute: ApiCodeAssistRoute,
   ApiEditImageRoute: ApiEditImageRoute,
