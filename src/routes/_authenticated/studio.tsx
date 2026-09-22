@@ -110,10 +110,7 @@ function StudioPage() {
 
   const sign = async (rows: GenerationRow[]): Promise<GalleryItem[]> =>
     Promise.all(
-      rows.map(async (row) => {
-        const file = await getFile(row.path);
-        return { ...row, image_path: row.path, signedUrl: file ? URL.createObjectURL(file) : null };
-      }),
+      rows.map(async (row) => ({ ...row, image_path: row.path, signedUrl: await getFile(row.path) })),
     );
 
   const galleryQuery = useQuery({
