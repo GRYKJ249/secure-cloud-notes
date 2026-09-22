@@ -2,10 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { BadgeCheck, Camera, Code2, Cpu, ImageIcon, Loader2, Save, ShieldCheck, Sparkles } from "lucide-react";
+import { Camera, Code2, ImageIcon, Loader2, MessageSquare, Save, Sparkles } from "lucide-react";
 import { OperaLogoMark } from "@/components/brand/OperaLogoMark";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { listImages, listThreads, saveLocalProfile } from "@/lib/local-db";
 import { useProfile } from "@/hooks/useProfile";
 import { UserAvatar } from "@/components/profile/UserAvatar";
 import { uploadAvatar } from "@/lib/avatar";
@@ -27,7 +26,6 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { t, lang, setLang } = useLang();
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
@@ -50,15 +48,11 @@ function Dashboard() {
       );
       return;
     }
-    const { error } = await supabase.from("profiles").update({ avatar_url: result.path }).eq("id", user!.id);
+    saveLocalProfile({ avatar_url: result.path });
     setSaving(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
     toast.success(t("Picture updated.", "تم تحديث الصورة."));
     void refetch();
-    void queryClient.invalidateQueries({ queryKey: ["profile", user!.id] });
+    void queryClient.invalidateQueries({ queryKey: ["profile"] });
   };
 
   useEffect(() => {
@@ -69,22 +63,15 @@ function Dashboard() {
   }, [profile]);
 
   const save = async () => {
-    if (!user) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ display_name: displayName.trim(), username: username.trim() })
-      .eq("id", user.id);
+    saveLocalProfile({ display_name: displayName.trim(), username: username.trim() });
     setSaving(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
     toast.success(t("Profile saved.", "تم حفظ الملف الشخصي."));
-    void queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
+    void queryClient.invalidateQueries({ queryKey: ["profile"] });
   };
 
-  const verified = !!user?.email_confirmed_at;
+  const threadCount = listThreads().length;
+  const imageCount = listImages().length;
 
   return (
     <div dir={lang === "ar" ? "rtl" : "ltr"} className="min-h-full px-4 py-10">
@@ -126,18 +113,12 @@ function Dashboard() {
             </div>
             <div className="min-w-0">
               <h1 className="font-display text-2xl font-bold">
-                {t("Welcome", "أهلاً")}, {profile?.display_name || user?.email}
+                {t("Welcome", "أهلاً")}, {profile?.display_name || t("friend", "صديقنا")}
               </h1>
-              <p className="truncate text-sm text-muted-foreground">{user?.email}</p>
+              <p className="truncate text-sm text-muted-foreground">
+                {t("Stored only in this browser.", "محفوظ في هذا المتصفح فقط.")}
+              </p>
             </div>
-            <span
-              className={`ms-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs ${
-                verified ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
-              }`}
-            >
-              <BadgeCheck className="h-4 w-4" />
-              {verified ? t("Verified account", "حساب موثّق") : t("Email not confirmed", "البريد غير مؤكد")}
-            </span>
           </div>
 
           {isLoading ? (
@@ -174,9 +155,14 @@ function Dashboard() {
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="glass rounded-xl p-6">
-            <Cpu className="h-5 w-5 text-primary" />
-            <p className="mt-3 text-3xl font-bold">{profile?.tokens_used ?? 0}</p>
-            <p className="text-sm text-muted-foreground">{t("AI tokens used", "الرصيد المستخدم للذكاء الاصطناعي")}</p>
+            <MessageSquare className="h-5 w-5 text-primary" />
+            <p className="mt-3 text-3xl font-bold">{threadCount}</p>
+            <p className="text-sm text-muted-foreground">{t("Saved conversations", "المحادثات المحفوظة")}</p>
+          </div>
+          <div className="glass rounded-xl p-6">
+            <ImageIcon className="h-5 w-5 text-primary" />
+            <p className="mt-3 text-3xl font-bold">{imageCount}</p>
+            <p className="text-sm text-muted-foreground">{t("Generated images", "الصور المُنشأة")}</p>
           </div>
           <Link to="/chat" className="glass rounded-xl p-6 transition hover:border-primary/50">
             <Sparkles className="h-5 w-5 text-primary" />
@@ -185,25 +171,11 @@ function Dashboard() {
               {t("Talk to Opera AI with streaming answers and saved conversations.", "تحدّث مع أوبرا الذكي بردود فورية ومحادثات محفوظة.")}
             </p>
           </Link>
-          <Link to="/studio" className="glass rounded-xl p-6 transition hover:border-primary/50">
-            <ImageIcon className="h-5 w-5 text-primary" />
-            <p className="mt-3 font-semibold">{t("Creative Studio", "الاستوديو الإبداعي")}</p>
-            <p className="text-sm text-muted-foreground">
-              {t("Generate original images and revisit your private archive.", "أنشئ صوراً أصلية واستعرض أرشيفك الخاص.")}
-            </p>
-          </Link>
           <Link to="/code" className="glass rounded-xl p-6 transition hover:border-primary/50">
             <Code2 className="h-5 w-5 text-primary" />
             <p className="mt-3 font-semibold">{t("Code Workspace", "مساحة الأكواد")}</p>
             <p className="text-sm text-muted-foreground">
               {t("Cloud IDE with a live terminal and AI refactoring.", "بيئة برمجة سحابية بطرفية حيّة ومساعد ذكي للتحسين.")}
-            </p>
-          </Link>
-          <Link to="/security" className="glass rounded-xl p-6 transition hover:border-primary/50">
-            <ShieldCheck className="h-5 w-5 text-primary" />
-            <p className="mt-3 font-semibold">{t("Security center", "مركز الأمان")}</p>
-            <p className="text-sm text-muted-foreground">
-              {t("Activity history and personal API keys, stored in this browser.", "سجل النشاط ومفاتيح API الشخصية، محفوظة في هذا المتصفح.")}
             </p>
           </Link>
         </div>

@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { addImage, deleteImage, getFile, listImages, type GeneratedImage } from "@/lib/local-db";
+import { deleteImage, getFile, listImages, saveImageData, type GeneratedImage } from "@/lib/local-db";
 import { useLang } from "@/lib/i18n";
 import { streamImage } from "@/lib/stream-image";
 
@@ -93,15 +93,6 @@ const IDEAS = [
   "A lunar fashion portrait with crystal fabric and Earth in the distance",
   "A friendly robot serving tea at the edge of a colorful nebula",
 ];
-
-function dataUrlToBlob(dataUrl: string): Blob {
-  const comma = dataUrl.indexOf(",");
-  const mime = dataUrl.slice(0, comma).match(/data:(.*?);/)?.[1] ?? "image/png";
-  const binary = atob(dataUrl.slice(comma + 1));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return new Blob([bytes], { type: mime });
-}
 
 function StudioPage() {
   const { t, lang } = useLang();
