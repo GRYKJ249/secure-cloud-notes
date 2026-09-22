@@ -104,7 +104,6 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 function StudioPage() {
-  const { user } = useAuth();
   const { t, lang } = useLang();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
@@ -165,7 +164,7 @@ function StudioPage() {
   };
 
   const generate = async () => {
-    if (!user || !prompt.trim() || result?.status === "loading") return;
+    if (!prompt.trim() || result?.status === "loading") return;
     const basePrompt = prompt.trim();
     const selectedStyle = STYLES.find((item) => item.name === style) ?? STYLES[3];
     const effectivePrompt = [basePrompt, selectedStyle?.detail, negativeEnabled && negativePrompt.trim() ? `Avoid: ${negativePrompt.trim()}` : ""]
@@ -185,28 +184,13 @@ function StudioPage() {
       );
       if (!finalDataUrl) throw new Error(t("The image service returned no final image.", "لم تُرجع خدمة الصور نتيجة نهائية."));
 
-      const id = crypto.randomUUID();
-      const path = `${user.id}/${id}.png`;
-      const { error: uploadError } = await supabase.storage
-        .from("generations")
-        .upload(path, dataUrlToBlob(finalDataUrl), { contentType: "image/png", upsert: true });
-      if (uploadError) throw uploadError;
-      const { error: saveError } = await supabase.from("generated_images").insert({
-        id,
-        user_id: user.id,
-        prompt: basePrompt,
-        style,
-        image_path: path,
-      });
-      if (saveError) throw saveError;
-      const { data: signed } = await supabase.storage.from("generations").createSignedUrl(path, 60 * 60);
+      await saveImageData(finalDataUrl, basePrompt);
       setResult({
         prompt: basePrompt,
         status: "done",
         dataUrl: finalDataUrl,
-        ...(signed?.signedUrl ? { signedUrl: signed.signedUrl } : {}),
       });
-      await queryClient.invalidateQueries({ queryKey: ["generated-images", user.id] });
+      await queryClient.invalidateQueries({ queryKey: ["generated-images"] });
       toast.success(t("Image created and saved.", "تم إنشاء الصورة وحفظها."));
     } catch (error) {
       const raw = error instanceof Error ? error.message : String(error);
@@ -254,17 +238,8 @@ function StudioPage() {
     if (!deleteTarget) return;
     const target = deleteTarget;
     setDeleteTarget(null);
-    const { error: storageError } = await supabase.storage.from("generations").remove([target.image_path]);
-    if (storageError) {
-      toast.error(storageError.message);
-      return;
-    }
-    const { error: rowError } = await supabase.from("generated_images").delete().eq("id", target.id);
-    if (rowError) {
-      toast.error(rowError.message);
-      return;
-    }
-    await queryClient.invalidateQueries({ queryKey: ["generated-images", user?.id] });
+    deleteImage(target.id);
+    await queryClient.invalidateQueries({ queryKey: ["generated-images"] });
     toast.success(t("Image deleted.", "تم حذف الصورة."));
   };
 
