@@ -1,12 +1,9 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Code2, ImageIcon, LayoutDashboard, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, ShieldCheck, X } from "lucide-react";
+import { Code2, ImageIcon, LayoutDashboard, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { OperaLogoMark } from "@/components/brand/OperaLogoMark";
 import { UserAvatar } from "@/components/profile/UserAvatar";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useLang } from "@/lib/i18n";
 
@@ -15,25 +12,14 @@ const links = [
   { to: "/studio", icon: ImageIcon, en: "Creative Studio", ar: "استوديو الصور" },
   { to: "/code", icon: Code2, en: "Code workspace", ar: "بيئة الأكواد" },
   { to: "/dashboard", icon: LayoutDashboard, en: "Dashboard & profile", ar: "لوحة التحكم والملف" },
-  { to: "/security", icon: ShieldCheck, en: "Security & settings", ar: "الأمان والإعدادات" },
 ] as const;
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {
   const { t, lang } = useLang();
-  const { user } = useAuth();
   const { username, displayName, avatarUrl } = useProfile();
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const name = displayName || username || t("Your account", "حسابك");
-
-  const signOut = async () => {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
-  };
 
   const sidebar = (
     <aside className={`flex h-full flex-col border-e border-border bg-card transition-[width] duration-200 ${collapsed ? "md:w-20" : "md:w-72"} w-72`}>
@@ -55,8 +41,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
       <div className="border-t border-border p-3">
         <div className={`flex items-center gap-3 rounded-lg bg-muted/50 p-2 ${collapsed ? "justify-center" : ""}`}>
           <UserAvatar src={avatarUrl} name={name} className="h-10 w-10 shrink-0" />
-          {!collapsed && <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{name}</p><p dir="ltr" className="truncate text-xs text-muted-foreground">{username ? `@${username}` : user?.email}</p></div>}
-          {!collapsed && <Button variant="ghost" size="icon" onClick={() => void signOut()} aria-label={t("Log out", "تسجيل الخروج")}><LogOut /></Button>}
+          {!collapsed && <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{name}</p>{username && <p dir="ltr" className="truncate text-xs text-muted-foreground">{`@${username}`}</p>}</div>}
         </div>
         <Button variant="ghost" className="mt-2 hidden w-full md:flex" onClick={() => setCollapsed((value) => !value)} aria-label={t("Toggle sidebar", "تبديل الشريط الجانبي")}>
           {collapsed ? <PanelLeftOpen /> : <><PanelLeftClose /><span>{t("Collapse", "طي الشريط")}</span></>}
