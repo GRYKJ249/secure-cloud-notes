@@ -12,6 +12,7 @@ import { addMessage, listMessages, saveImageData, updateThread } from "@/lib/loc
 import { useLang } from "@/lib/i18n";
 import { detectImageRequest } from "@/lib/image-intent";
 import { streamImage } from "@/lib/stream-image";
+import { PENDING_KEY } from "./index";
 
 export const Route = createFileRoute("/_authenticated/chat/$threadId")({
   head: () => ({
@@ -146,11 +147,9 @@ function Thread({ threadId, initial }: { threadId: string; initial: LoadedThread
     }
   };
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const text = input.trim();
-    if (!text || busy) return;
-    setInput("");
+  const send = (raw: string) => {
+    const text = raw.trim();
+    if (!text) return;
 
     addMessage({ thread_id: threadId, role: "user", content: text });
 
@@ -174,6 +173,28 @@ function Thread({ threadId, initial }: { threadId: string; initial: LoadedThread
 
     sendMessage({ text });
   };
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy || !input.trim()) return;
+    const text = input;
+    setInput("");
+    send(text);
+  };
+
+  // A message typed on the "new chat" screen is handed over through sessionStorage.
+  const pendingHandled = useRef(false);
+  useEffect(() => {
+    if (pendingHandled.current || typeof window === "undefined") return;
+    pendingHandled.current = true;
+    const pending = sessionStorage.getItem(PENDING_KEY);
+    if (!pending) return;
+    sessionStorage.removeItem(PENDING_KEY);
+    // Wait one tick so the chat stream is listening before the first message goes out.
+    window.setTimeout(() => send(pending), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const renderImagesAt = (index: number) =>
     imageTurns

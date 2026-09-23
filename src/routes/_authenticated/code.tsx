@@ -102,7 +102,7 @@ print("pi ≈", round(math.pi, 5))
     path: "README.md",
     content: `# My Opera AI project
 
-- Files auto-save to your Opera AI account.
+- Files auto-save in this browser.
 - Select code and use the AI panel to explain, refactor or fix it.
 - Download everything as a ZIP any time.
 `,
